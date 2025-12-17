@@ -87,8 +87,3 @@ streamlit run app.py
 ```
 
 ---
-
-**您可以嘗試的下一個步驟：**
-需要我幫您把 `Hugging Face Token` 的環境變數設定邏輯也加入到 `app.py` 中嗎？這樣執行起來會更流暢。
-
-```
