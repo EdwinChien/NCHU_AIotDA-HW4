@@ -75,5 +75,3 @@ streamlit run app.py
 
 * 請確保 `faiss_index` 資料夾內的模型與 `app.py` 中指定的 `HuggingFaceEmbeddings` 模型一致，否則向量比對會失敗。
 * 建議使用 `allow_dangerous_deserialization=True` 參數載入本地 FAISS 時，僅載入來源可信的資料庫檔案。
-
-```
