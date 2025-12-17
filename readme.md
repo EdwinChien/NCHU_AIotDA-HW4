@@ -1,7 +1,4 @@
 
----
-
-```markdown
 # 🤖 TAICA 生成式 AI：RAG 知識庫問答系統
 
 這是一個基於 **RAG (Retrieval-Augmented Generation)** 技術開發的 AI 應用程式。本專案參考 1141 【TAICA。生成式 AI】課程實作，整合了 LangChain、Hugging Face Embedding 以及 Groq 高速推理引擎。
@@ -11,8 +8,6 @@
 * **高效檢索**：使用 FAISS 向量資料庫進行語義比對，精準定位相關片段。
 * **高速生成**：串接 Groq API，利用 Llama 3 模型提供近乎即時的對話體驗。
 * **互動界面**：使用 Streamlit 打造簡潔直觀的網頁操作介面。
-
----
 
 ## 🛠️ 快速開始
 
@@ -76,13 +71,9 @@ streamlit run app.py
 3. **檢索 (Retrieval)**：當使用者提問時，找出最相似的 N 個文件塊。
 4. **增強生成 (Generation)**：將「問題 + 文件塊」組成 Prompt 丟給 LLM 產生答案。
 
----
-
 ## ⚠️ 注意事項
 
 * 請確保 `faiss_index` 資料夾內的模型與 `app.py` 中指定的 `HuggingFaceEmbeddings` 模型一致，否則向量比對會失敗。
 * 建議使用 `allow_dangerous_deserialization=True` 參數載入本地 FAISS 時，僅載入來源可信的資料庫檔案。
 
 ```
-
----
