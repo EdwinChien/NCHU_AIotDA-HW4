@@ -4,13 +4,12 @@ import tempfile
 import warnings
 from huggingface_hub import InferenceClient
 
-# 核心基礎套件 (使用 2025 最新路徑)
+# 核心基礎套件
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import Chroma
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.runnables import RunnablePassthrough
 
 warnings.filterwarnings("ignore")
 
@@ -27,22 +26,19 @@ if not hf_token:
 # --- 初始化模型與向量庫 ---
 @st.cache_resource
 def get_embedding_model():
-    # 使用 HuggingFace 託管的 Embedding 模型
     return HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
 
 @st.cache_resource
 def get_inference_client(token):
-    # 使用 InferenceClient 避開所有 LangChain 封裝 Bug
-    return InferenceClient(model="google/gemma-2-2b-it", token=token)
+    # 更換為更穩定的模型節點
+    return InferenceClient(model="HuggingFaceH4/zephyr-7b-beta", token=token)
 
 # --- PDF 處理 ---
 def process_pdf(file, _embeddings):
     with tempfile.NamedTemporaryFile(delete=False) as tmp:
         tmp.write(file.getvalue())
         loader = PyPDFLoader(tmp.name)
-        # 增加切分容錯
         docs = loader.load_and_split(RecursiveCharacterTextSplitter(chunk_size=600, chunk_overlap=100))
-        # 使用記憶體形式的 Chroma
         vector_db = Chroma.from_documents(docs, _embeddings)
         os.remove(tmp.name)
     return vector_db
@@ -59,28 +55,23 @@ if uploaded_file:
             st.session_state.db = process_pdf(uploaded_file, embeddings)
             st.success("✅ 索引建立完成！")
 
-    # 建立檢索器
     retriever = st.session_state.db.as_retriever(search_kwargs={"k": 3})
-
     user_input = st.text_input("💬 請針對文件提問：")
 
     if user_input:
         with st.spinner("🤖 思考中..."):
             try:
-                # 【關鍵修正】: 舊版 get_relevant_documents 已棄用，改用 invoke
                 search_results = retriever.invoke(user_input)
-                
                 context_text = "\n\n".join([doc.page_content for doc in search_results])
 
                 # 構建 Prompt
-                prompt = f"請根據以下內容回答問題：\n\n內容：{context_text}\n\n問題：{user_input}\n\n回答（請用繁體中文）："
+                prompt = f"<|system|>\n請根據以下內容回答問題，並一律使用繁體中文回答。</s>\n<|user|>\n內容：{context_text}\n問題：{user_input}</s>\n<|assistant|>\n"
 
-                # 使用官方 Client 進行推論
+                # 使用官方 Client
                 response = client.text_generation(
                     prompt,
                     max_new_tokens=512,
-                    temperature=0.1,
-                    stop_sequences=["問題："]
+                    temperature=0.2,
                 )
                 
                 st.markdown("### 🤖 AI 回答")
@@ -92,6 +83,5 @@ if uploaded_file:
 
             except Exception as e:
                 st.error(f"發生錯誤：{str(e)}")
-                st.info("提示：如果遇到版本問題，請嘗試點擊側邊欄的清除快取。")
 else:
     st.info("👈 請先上傳 PDF 文件開始對話。")
