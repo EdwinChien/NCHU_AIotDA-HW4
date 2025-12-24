@@ -4,17 +4,16 @@ import tempfile
 import warnings
 from huggingface_hub import InferenceClient
 
-# 核心基礎套件
+# 核心套件
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import Chroma
-from langchain_core.prompts import ChatPromptTemplate
 
 warnings.filterwarnings("ignore")
 
-st.set_page_config(page_title="RAG 終極修復版", layout="wide")
-st.title("📘 RAG 文件問答系統 (API 穩定版)")
+st.set_page_config(page_title="RAG 穩定修復版", layout="wide")
+st.title("📘 RAG 文件問答系統 (API 任務修正版)")
 
 # 安全讀取 Token
 hf_token = st.secrets.get("HUGGINGFACEHUB_API_TOKEN") or st.sidebar.text_input("HuggingFace Token", type="password")
@@ -30,7 +29,7 @@ def get_embedding_model():
 
 @st.cache_resource
 def get_inference_client(token):
-    # 更換為更穩定的模型節點
+    # 使用目前最穩定的模型
     return InferenceClient(model="HuggingFaceH4/zephyr-7b-beta", token=token)
 
 # --- PDF 處理 ---
@@ -64,18 +63,21 @@ if uploaded_file:
                 search_results = retriever.invoke(user_input)
                 context_text = "\n\n".join([doc.page_content for doc in search_results])
 
-                # 構建 Prompt
-                prompt = f"<|system|>\n請根據以下內容回答問題，並一律使用繁體中文回答。</s>\n<|user|>\n內容：{context_text}\n問題：{user_input}</s>\n<|assistant|>\n"
+                # 【核心修正】: 改用 chat_completion 並傳入 messages 格式
+                # 這樣能完美支援 conversational 任務與多種 Provider
+                messages = [
+                    {"role": "system", "content": "你是一個專業助手。請根據內容回答問題，並使用繁體中文。"},
+                    {"role": "user", "content": f"內容：{context_text}\n\n問題：{user_input}"}
+                ]
 
-                # 使用官方 Client
-                response = client.text_generation(
-                    prompt,
-                    max_new_tokens=512,
+                response = client.chat_completion(
+                    messages=messages,
+                    max_tokens=512,
                     temperature=0.2,
                 )
                 
                 st.markdown("### 🤖 AI 回答")
-                st.write(response)
+                st.write(response.choices[0].message.content)
                 
                 with st.expander("📄 查看參考來源"):
                     for i, doc in enumerate(search_results):
