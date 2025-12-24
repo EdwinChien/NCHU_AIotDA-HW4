@@ -2,14 +2,20 @@ import streamlit as st
 import os
 import tempfile
 import warnings
+
+# 1. 基礎組件
 from langchain_community.document_loaders import PyPDFLoader
-# ✅ 新版路徑 (對應 langchain-text-splitters 套件)
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_huggingface import HuggingFaceEmbeddings, HuggingFaceEndpoint
 from langchain_community.vectorstores import Chroma
+
+# 2. 核心 Chains (改用最明確的路徑)
 from langchain.chains import create_retrieval_chain
 from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain_core.prompts import ChatPromptTemplate
+
+# 確保這行在最前面，防止某些環境下的版本衝突
+warnings.filterwarnings("ignore")
 
 # 忽略不必要的警告
 warnings.filterwarnings("ignore")
