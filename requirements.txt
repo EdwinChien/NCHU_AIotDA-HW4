@@ -17,3 +17,6 @@ python-docx
 
 # 其他基礎工具
 python-dotenv
+
+chromadb
+sentence-transformers
