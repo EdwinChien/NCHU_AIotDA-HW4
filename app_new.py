@@ -4,7 +4,7 @@ import tempfile
 import warnings
 from huggingface_hub import InferenceClient
 
-# 核心基礎套件
+# 核心基礎套件 (使用 2025 最新路徑)
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_huggingface import HuggingFaceEmbeddings
@@ -27,11 +27,12 @@ if not hf_token:
 # --- 初始化模型與向量庫 ---
 @st.cache_resource
 def get_embedding_model():
+    # 使用 HuggingFace 託管的 Embedding 模型
     return HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
 
 @st.cache_resource
 def get_inference_client(token):
-    # 直接使用官方 InferenceClient，避開 LangChain 封裝 Bug
+    # 使用 InferenceClient 避開所有 LangChain 封裝 Bug
     return InferenceClient(model="google/gemma-2-2b-it", token=token)
 
 # --- PDF 處理 ---
@@ -39,7 +40,9 @@ def process_pdf(file, _embeddings):
     with tempfile.NamedTemporaryFile(delete=False) as tmp:
         tmp.write(file.getvalue())
         loader = PyPDFLoader(tmp.name)
+        # 增加切分容錯
         docs = loader.load_and_split(RecursiveCharacterTextSplitter(chunk_size=600, chunk_overlap=100))
+        # 使用記憶體形式的 Chroma
         vector_db = Chroma.from_documents(docs, _embeddings)
         os.remove(tmp.name)
     return vector_db
@@ -56,21 +59,23 @@ if uploaded_file:
             st.session_state.db = process_pdf(uploaded_file, embeddings)
             st.success("✅ 索引建立完成！")
 
+    # 建立檢索器
     retriever = st.session_state.db.as_retriever(search_kwargs={"k": 3})
 
     user_input = st.text_input("💬 請針對文件提問：")
 
     if user_input:
         with st.spinner("🤖 思考中..."):
-            # 1. 檢索相關內容
-            search_results = retriever.get_relevant_documents(user_input)
-            context_text = "\n\n".join([doc.page_content for doc in search_results])
-
-            # 2. 構建 Prompt
-            prompt = f"請根據以下內容回答問題：\n\n內容：{context_text}\n\n問題：{user_input}\n\n回答（請用繁體中文）："
-
             try:
-                # 3. 使用官方 Client 進行推論 (穩定性最高)
+                # 【關鍵修正】: 舊版 get_relevant_documents 已棄用，改用 invoke
+                search_results = retriever.invoke(user_input)
+                
+                context_text = "\n\n".join([doc.page_content for doc in search_results])
+
+                # 構建 Prompt
+                prompt = f"請根據以下內容回答問題：\n\n內容：{context_text}\n\n問題：{user_input}\n\n回答（請用繁體中文）："
+
+                # 使用官方 Client 進行推論
                 response = client.text_generation(
                     prompt,
                     max_new_tokens=512,
@@ -78,14 +83,15 @@ if uploaded_file:
                     stop_sequences=["問題："]
                 )
                 
-                st.markdown("### AI 回答")
+                st.markdown("### 🤖 AI 回答")
                 st.write(response)
                 
-                with st.expander("查看參考來源"):
+                with st.expander("📄 查看參考來源"):
                     for i, doc in enumerate(search_results):
                         st.caption(f"來源 {i+1}: {doc.page_content}")
 
             except Exception as e:
-                st.error(f"模型呼叫出錯：{str(e)}")
+                st.error(f"發生錯誤：{str(e)}")
+                st.info("提示：如果遇到版本問題，請嘗試點擊側邊欄的清除快取。")
 else:
     st.info("👈 請先上傳 PDF 文件開始對話。")
