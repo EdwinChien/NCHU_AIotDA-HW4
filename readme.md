@@ -1,77 +1,87 @@
+import streamlit as st
+import os
+import tempfile
+import warnings
 
-# 🤖 TAICA 生成式 AI：RAG 知識庫問答系統
+# 核心基礎套件
+from langchain_community.document_loaders import PyPDFLoader
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_huggingface import HuggingFaceEmbeddings, HuggingFaceEndpoint
+from langchain_community.vectorstores import Chroma
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.output_parsers import StrOutputParser
+from langchain_core.runnables import RunnablePassthrough
 
-這是一個基於 **RAG (Retrieval-Augmented Generation)** 技術開發的 AI 應用程式。本專案參考 1141 【TAICA。生成式 AI】課程實作，整合了 LangChain、Hugging Face Embedding 以及 Groq 高速推理引擎。
+warnings.filterwarnings("ignore")
 
-## 🌟 功能特色
-* **減少幻覺**：AI 僅根據你提供的 PDF、Docx 或 TXT 文件內容進行回答。
-* **高效檢索**：使用 FAISS 向量資料庫進行語義比對，精準定位相關片段。
-* **高速生成**：串接 Groq API，利用 Llama 3 模型提供近乎即時的對話體驗。
-* **互動界面**：使用 Streamlit 打造簡潔直觀的網頁操作介面。
+st.set_page_config(page_title="RAG 穩定修復版", layout="wide")
+st.title("📘 RAG 文件問答系統 (API 路由修正版)")
 
-## 🛠️ 快速開始
+# 安全讀取 Token
+hf_token = st.secrets.get("HUGGINGFACEHUB_API_TOKEN") or st.sidebar.text_input("HuggingFace Token", type="password")
 
-### 1. 環境準備
-確保你的電腦已安裝 Python 3.9+，並複製此專案到本地：
+if not hf_token:
+    st.info("請輸入 API Token 以開始。")
+    st.stop()
 
-```bash
-git clone <your-repo-url>
-cd <your-repo-name>
+@st.cache_resource
+def load_resources(token):
+    # Embedding 模型
+    embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+    
+    # 解決 410 Gone 錯誤：使用最新版的 HuggingFaceEndpoint
+    # repo_id 建議使用穩定版本，例如 gemma-2-2b-it (這是目前的推薦版)
+    repo_id = "google/gemma-2-2b-it" 
+    
+    llm = HuggingFaceEndpoint(
+        repo_id=repo_id,
+        task="text-generation",
+        max_new_tokens=512,
+        temperature=0.1,
+        huggingfacehub_api_token=token,
+        timeout=300
+    )
+    return embeddings, llm
 
-```
+embeddings_model, llm_model = load_resources(hf_token)
 
-### 2. 安裝套件
+# --- 文件處理與問答邏輯 (保持穩定版語法) ---
+uploaded_file = st.file_uploader("選擇 PDF 文件", type="pdf")
 
-使用 pip 安裝 `requirements.txt` 中列出的必要套件：
+if uploaded_file:
+    if "db" not in st.session_state:
+        with st.spinner("建立索引中..."):
+            with tempfile.NamedTemporaryFile(delete=False) as tmp:
+                tmp.write(uploaded_file.getvalue())
+                loader = PyPDFLoader(tmp.name)
+                docs = loader.load_and_split(RecursiveCharacterTextSplitter(chunk_size=600, chunk_overlap=100))
+                st.session_state.db = Chroma.from_documents(docs, embeddings_model)
+                os.remove(tmp.name)
 
-```bash
-pip install -r requirements.txt
+    retriever = st.session_state.db.as_retriever(search_kwargs={"k": 3})
 
-```
+    prompt = ChatPromptTemplate.from_template("""
+    請根據以下 Context 回答問題。請使用「繁體中文」回答。
+    Context: {context}
+    問題: {question}
+    回答:""")
 
-### 3. 準備向量資料庫 (Vector DB)
+    rag_chain = (
+        {"context": retriever | (lambda docs: "\n\n".join(d.page_content for d in docs)), 
+         "question": RunnablePassthrough()}
+        | prompt
+        | llm_model
+        | StrOutputParser()
+    )
 
-根據課程影片實作，你需要先完成以下步驟：
-
-1. 執行課程提供的 **「程式 A」** (Colab)，上傳你的文件並生成向量庫。
-2. 下載產生的 `index.zip` 並解壓縮。
-3. 將解壓後的資料夾命名為 `faiss_index`，並放在本專案的根目錄下。
-
-### 4. 取得 API Key
-
-本系統需要以下金鑰：
-
-* **Groq API Key**: 前往 [Groq Cloud](https://console.groq.com/) 申請（用於 LLM 生成）。
-* **Hugging Face Token**: 用於下載 Embedding 模型（如影片中的 `Gemma` 相關模型）。
-
-### 5. 執行應用程式
-
-在終端機輸入以下指令啟動 Streamlit：
-
-```bash
-streamlit run app.py
-
-```
-
----
-
-## 📂 專案架構
-
-* `app.py`: Streamlit 網頁主程式。
-* `faiss_index/`: 儲存向量化的文件特徵（需自行放入）。
-* `requirements.txt`: 專案依賴清單。
-* `README.md`: 專案說明文件。
-
----
-
-## 🧠 RAG 運作流程
-
-1. **文件切塊 (Chunking)**：將大型文件拆解為易於檢索的小片段。
-2. **嵌入 (Embedding)**：將文字轉為數學向量。
-3. **檢索 (Retrieval)**：當使用者提問時，找出最相似的 N 個文件塊。
-4. **增強生成 (Generation)**：將「問題 + 文件塊」組成 Prompt 丟給 LLM 產生答案。
-
-## ⚠️ 注意事項
-
-* 請確保 `faiss_index` 資料夾內的模型與 `app.py` 中指定的 `HuggingFaceEmbeddings` 模型一致，否則向量比對會失敗。
-* 建議使用 `allow_dangerous_deserialization=True` 參數載入本地 FAISS 時，僅載入來源可信的資料庫檔案。
+    user_input = st.text_input("💬 請輸入問題：")
+    if user_input:
+        with st.spinner("AI 正在思考..."):
+            try:
+                # 某些模型生成結果會包含 prompt，這裡做簡單清洗
+                response = rag_chain.invoke(user_input)
+                st.markdown("### 🤖 AI 回答")
+                st.write(response)
+            except Exception as e:
+                st.error(f"連線失敗：{str(e)}")
+                st.info("提示：如果遇到 410 錯誤，請確認 requirements.txt 中的 huggingface-hub 為最新版本。")
