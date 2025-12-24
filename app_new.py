@@ -3,7 +3,8 @@ import os
 import tempfile
 import warnings
 from langchain_community.document_loaders import PyPDFLoader
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+# ✅ 新版路徑 (對應 langchain-text-splitters 套件)
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_huggingface import HuggingFaceEmbeddings, HuggingFaceEndpoint
 from langchain_community.vectorstores import Chroma
 from langchain.chains import create_retrieval_chain
