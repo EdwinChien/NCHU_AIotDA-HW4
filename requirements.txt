@@ -6,4 +6,4 @@ langchain-text-splitters
 chromadb
 pypdf
 sentence-transformers
-huggingface-hub==0.24.0
+huggingface-hub>=0.26.0
